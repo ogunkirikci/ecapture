@@ -11,6 +11,7 @@ import (
 const (
 	// 备选 HOOK的函数  SSL_is_init_finished \ SSL_get_wbio \ SSL_write
 	MasterKeyHookFuncOpenSSL = "SSL_write"
+	MasterKeyHookFuncNNZ     = "nnz_SSL_write"
 
 	/*
 		在boringSSL类库里，SSL_write函数调用了 SSL_do_handshake ，
@@ -21,6 +22,13 @@ const (
 	MasterKeyHookFuncSSLBefore = "SSL_in_before"
 	MasterKeyHookFuncSSLState  = "SSL_state"
 )
+
+var nnzMasterHookCandidates = []string{
+	"nnz_SSL_write_ex2",
+	"nnz_SSL_write_ex",
+	"nnz_SSL_write",
+	"nnz_SSL_do_handshake",
+}
 
 var (
 	/*

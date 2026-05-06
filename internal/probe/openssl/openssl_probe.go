@@ -234,6 +234,9 @@ func (p *Probe) setupManagerText() error {
 	if opensslPath == "" {
 		return errors.NewConfigurationError("openssl_path is required for OpenSSL probe", nil)
 	}
+	readHook := p.config.ReadHookFunc
+	writeHook := p.config.WriteHookFunc
+	setFDHooks := p.config.SetFDHookFuncs
 
 	var probes []*manager.Probe
 	var maps []*manager.Map
@@ -248,25 +251,25 @@ func (p *Probe) setupManagerText() error {
 		{
 			Section:          "uprobe/SSL_write",
 			EbpfFuncName:     "probe_entry_SSL_write",
-			AttachToFuncName: "SSL_write",
+			AttachToFuncName: writeHook,
 			BinaryPath:       opensslPath,
 		},
 		{
 			Section:          "uretprobe/SSL_write",
 			EbpfFuncName:     "probe_ret_SSL_write",
-			AttachToFuncName: "SSL_write",
+			AttachToFuncName: writeHook,
 			BinaryPath:       opensslPath,
 		},
 		{
 			Section:          "uprobe/SSL_read",
 			EbpfFuncName:     "probe_entry_SSL_read",
-			AttachToFuncName: "SSL_read",
+			AttachToFuncName: readHook,
 			BinaryPath:       opensslPath,
 		},
 		{
 			Section:          "uretprobe/SSL_read",
 			EbpfFuncName:     "probe_ret_SSL_read",
-			AttachToFuncName: "SSL_read",
+			AttachToFuncName: readHook,
 			BinaryPath:       opensslPath,
 		},
 
@@ -326,28 +329,22 @@ func (p *Probe) setupManagerText() error {
 		},*/
 
 		// ------------------- SSL_set_fd hook-------------------------------------
-		{
+	}
+	for _, setFDHook := range setFDHooks {
+		probes = append(probes, &manager.Probe{
 			Section:          "uprobe/SSL_set_fd",
 			EbpfFuncName:     "probe_SSL_set_fd",
-			AttachToFuncName: "SSL_set_fd",
+			AttachToFuncName: setFDHook,
 			BinaryPath:       opensslPath,
-			UID:              "uprobe_ssl_set_fd",
-		},
-		{
-			Section:          "uprobe/SSL_set_rfd",
-			EbpfFuncName:     "probe_SSL_set_fd",
-			AttachToFuncName: "SSL_set_rfd",
-			BinaryPath:       opensslPath,
-			UID:              "uprobe_ssl_set_rfd",
-		},
-		{
-			Section:          "uprobe/SSL_set_wfd",
-			EbpfFuncName:     "probe_SSL_set_fd",
-			AttachToFuncName: "SSL_set_wfd",
-			BinaryPath:       opensslPath,
-			UID:              "uprobe_ssl_set_wfd",
-		},
+			UID:              fmt.Sprintf("uprobe_%s", setFDHook),
+		})
 	}
+	p.Logger().Info().
+		Bool("is_nnz", p.config.IsNNZ).
+		Str("read_hook", readHook).
+		Str("write_hook", writeHook).
+		Strs("set_fd_hooks", setFDHooks).
+		Msg("Configuring text mode hooks")
 
 	p.bpfManager = &manager.Manager{
 		Probes: probes,
@@ -472,6 +469,10 @@ func (p *Probe) setupManagerPcapNG() error {
 	// Note: pcapKeylogWriter will be closed through pcapKeylogHandler.Close()
 	// Don't add it to p.closer to avoid double-close
 	p.Logger().Info().Str("pcap_file", pcapFile).Msg("Pcap handler registered")
+	p.Logger().Info().
+		Bool("is_nnz", p.config.IsNNZ).
+		Strs("selected_master_hooks", p.config.MasterHookFuncs).
+		Msg("Master secret hooks configured for pcapng mode")
 	p.Logger().Debug().
 		Str("ifname", p.config.Ifname).
 		Msg("Added TC probes, SSL probes, and master secret probe for pcap mode")
@@ -526,6 +527,10 @@ func (p *Probe) setupManagerKeyLog() error {
 	// Note: keylogWriter will be closed through keylogHandler.Close() when dispatcher closes
 	// Don't add it to p.closer to avoid double-close
 	p.Logger().Info().Str("Writer", keylogWriter.Name()).Msg("Keylog handler registered")
+	p.Logger().Info().
+		Bool("is_nnz", p.config.IsNNZ).
+		Strs("selected_master_hooks", p.config.MasterHookFuncs).
+		Msg("Master secret hooks configured for keylog mode")
 
 	p.bpfManager = &manager.Manager{
 		Probes: probes,

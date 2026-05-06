@@ -56,16 +56,27 @@ type Config struct {
 	SslVersion      string   `json:"sslversion"`      // Detected OpenSSL version
 	IsBoringSSL     bool     `json:"isboringssl"`     // Whether this is BoringSSL
 	MasterHookFuncs []string `json:"masterhookfuncs"` // List of master hook functions to attach
+	ReadHookFunc    string   `json:"readhookfunc"`    // Function used for read plaintext capture
+	WriteHookFunc   string   `json:"writehookfunc"`   // Function used for write plaintext capture
+	SetFDHookFuncs  []string `json:"setfdhookfuncs"`  // Functions used to bind SSL to fd
 	SslBpfFile      string   `json:"sslbpffile"`      // Path to the eBPF object file for the detected OpenSSL version
 	IsAndroid       bool     `json:"is_android"`      // Whether the target system is Android (for Android-specific handling)
 	AndroidVer      string   `json:"androidver"`      // Android version (for Android-specific handling)
+	IsNNZ           bool     `json:"isnnz"`           // Whether target library looks like Oracle NNZ
 }
 
 // NewConfig creates a new OpenSSL probe configuration.
 func NewConfig() *Config {
 	return &Config{
-		BaseConfig:  config.NewBaseConfig(),
-		CaptureMode: "text", // Default to text mode
+		BaseConfig:    config.NewBaseConfig(),
+		CaptureMode:   "text", // Default to text mode
+		ReadHookFunc:  "SSL_read",
+		WriteHookFunc: "SSL_write",
+		SetFDHookFuncs: []string{
+			"SSL_set_fd",
+			"SSL_set_rfd",
+			"SSL_set_wfd",
+		},
 	}
 }
 
@@ -265,6 +276,7 @@ func (c *Config) GetKeylogFile() string {
 // getSslBpfFile 根据sslVersion参数，获取对应的bpf文件
 func (c *Config) getSslBpfFile(soPath, sslVersion string) error {
 	defer func() {
+		c.applyNNZHooks(soPath)
 		if strings.Contains(c.SslBpfFile, "boringssl") {
 			c.IsBoringSSL = true
 			c.MasterHookFuncs = []string{MasterKeyHookFuncBoringSSL}
@@ -542,4 +554,85 @@ func (c *Config) downgradeOpensslVersion(ver string, soPath string) (string, boo
 		bpfFile, _ = sslVersionBpfMap[LinuxDefaultFilename111]
 	}
 	return bpfFile, false
+}
+
+func (c *Config) applyNNZHooks(soPath string) {
+	symbolSet, err := getExportedSymbolSet(soPath)
+	if err != nil {
+		return
+	}
+	hooks, ok := selectNNZMasterHooks(symbolSet)
+	if !ok {
+		return
+	}
+	c.IsNNZ = true
+	c.MasterHookFuncs = hooks
+	c.applyNNZTextHooks(symbolSet)
+}
+
+func detectNNZMasterHooks(soPath string) ([]string, bool) {
+	symbolSet, err := getExportedSymbolSet(soPath)
+	if err != nil {
+		return nil, false
+	}
+	return selectNNZMasterHooks(symbolSet)
+}
+
+func getExportedSymbolSet(soPath string) (map[string]struct{}, error) {
+	f, err := os.Open(soPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	ef, err := elf.NewFile(f)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = ef.Close() }()
+
+	symbols, err := ef.DynamicSymbols()
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(symbols))
+	for _, s := range symbols {
+		if s.Name == "" {
+			continue
+		}
+		set[s.Name] = struct{}{}
+	}
+	return set, nil
+}
+
+func selectNNZMasterHooks(symbolSet map[string]struct{}) ([]string, bool) {
+	selected := make([]string, 0, len(nnzMasterHookCandidates))
+	for _, name := range nnzMasterHookCandidates {
+		if _, found := symbolSet[name]; found {
+			selected = append(selected, name)
+		}
+	}
+	if len(selected) == 0 {
+		return nil, false
+	}
+	return selected, true
+}
+
+func (c *Config) applyNNZTextHooks(symbolSet map[string]struct{}) {
+	if _, found := symbolSet["nnz_SSL_write"]; found {
+		c.WriteHookFunc = "nnz_SSL_write"
+	}
+	if _, found := symbolSet["nnz_SSL_read"]; found {
+		c.ReadHookFunc = "nnz_SSL_read"
+	}
+
+	setFDHooks := make([]string, 0, 3)
+	for _, name := range []string{"nnz_SSL_set_fd", "nnz_SSL_set_rfd", "nnz_SSL_set_wfd"} {
+		if _, found := symbolSet[name]; found {
+			setFDHooks = append(setFDHooks, name)
+		}
+	}
+	if len(setFDHooks) > 0 {
+		c.SetFDHookFuncs = setFDHooks
+	}
 }

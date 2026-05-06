@@ -278,3 +278,44 @@ func TestConfig_ValidateCgroupPath_InvalidPath(t *testing.T) {
 		t.Error("validateCgroupPath() should fail for nonexistent path")
 	}
 }
+
+func TestSelectNNZMasterHooks_PriorityOrder(t *testing.T) {
+	symbols := map[string]struct{}{
+		"nnz_SSL_write":      {},
+		"nnz_SSL_write_ex2":  {},
+		"nnz_SSL_do_handshake": {},
+	}
+	hooks, ok := selectNNZMasterHooks(symbols)
+	if !ok {
+		t.Fatal("expected NNZ hook detection to succeed")
+	}
+	want := []string{"nnz_SSL_write_ex2", "nnz_SSL_write", "nnz_SSL_do_handshake"}
+	if len(hooks) != len(want) {
+		t.Fatalf("unexpected hook count: got=%d want=%d", len(hooks), len(want))
+	}
+	for i := range want {
+		if hooks[i] != want[i] {
+			t.Fatalf("hook order mismatch at %d: got=%s want=%s", i, hooks[i], want[i])
+		}
+	}
+}
+
+func TestConfigApplyNNZTextHooks(t *testing.T) {
+	cfg := NewConfig()
+	symbols := map[string]struct{}{
+		"nnz_SSL_write":  {},
+		"nnz_SSL_read":   {},
+		"nnz_SSL_set_fd": {},
+	}
+	cfg.applyNNZTextHooks(symbols)
+
+	if cfg.WriteHookFunc != "nnz_SSL_write" {
+		t.Fatalf("unexpected write hook: %s", cfg.WriteHookFunc)
+	}
+	if cfg.ReadHookFunc != "nnz_SSL_read" {
+		t.Fatalf("unexpected read hook: %s", cfg.ReadHookFunc)
+	}
+	if len(cfg.SetFDHookFuncs) != 1 || cfg.SetFDHookFuncs[0] != "nnz_SSL_set_fd" {
+		t.Fatalf("unexpected set fd hooks: %#v", cfg.SetFDHookFuncs)
+	}
+}
