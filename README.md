@@ -243,3 +243,4 @@ This project is supported by a [JetBrains IDE](https://www.jetbrains.com) licens
 contributions to the open-source community.
 
 ![JetBrains logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)
+
