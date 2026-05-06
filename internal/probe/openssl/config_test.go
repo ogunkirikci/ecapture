@@ -281,8 +281,8 @@ func TestConfig_ValidateCgroupPath_InvalidPath(t *testing.T) {
 
 func TestSelectNNZMasterHooks_PriorityOrder(t *testing.T) {
 	symbols := map[string]struct{}{
-		"nnz_SSL_write":      {},
-		"nnz_SSL_write_ex2":  {},
+		"nnz_SSL_write":        {},
+		"nnz_SSL_write_ex2":    {},
 		"nnz_SSL_do_handshake": {},
 	}
 	hooks, ok := selectNNZMasterHooks(symbols)
