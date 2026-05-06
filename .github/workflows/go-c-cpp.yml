@@ -44,6 +44,14 @@ jobs:
           DEBUG=1 make -j8
           cd ./lib/libpcap/ && sudo make install
           cd $GITHUB_WORKSPACE
+
+      - name: Package CO-RE tar.gz (amd64)
+        run: |
+          set -e
+          mkdir -p dist/pkg-core
+          cp ./bin/ecapture dist/pkg-core/ecapture
+          cp LICENSE CHANGELOG.md README.md README-zh_Hans.md dist/pkg-core/
+          tar -czf dist/ecapture-v0.0.0-ci-${{ github.sha }}-linux-amd64-core.tar.gz -C dist pkg-core
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
@@ -55,6 +63,22 @@ jobs:
           make clean
           make env
           make nocore
+
+      - name: Package non-CO-RE tar.gz (amd64)
+        run: |
+          set -e
+          rm -rf dist/pkg-nocore
+          mkdir -p dist/pkg-nocore
+          cp ./bin/ecapture dist/pkg-nocore/ecapture
+          cp LICENSE CHANGELOG.md README.md README-zh_Hans.md dist/pkg-nocore/
+          tar -czf dist/ecapture-v0.0.0-ci-${{ github.sha }}-linux-amd64-nocore.tar.gz -C dist pkg-nocore
+
+      - name: Upload build tar.gz artifacts (amd64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecapture-linux-amd64-${{ github.sha }}-tar.gz
+          path: dist/ecapture-*.tar.gz
+          retention-days: 7
       - name: Build CO-RE (Cross-Compilation)
         run: |
           make clean
@@ -106,6 +130,14 @@ jobs:
           DEBUG=1 make -j8
           cd ./lib/libpcap/ && sudo make install
           cd $GITHUB_WORKSPACE
+
+      - name: Package CO-RE tar.gz (arm64)
+        run: |
+          set -e
+          mkdir -p dist/pkg-core
+          cp ./bin/ecapture dist/pkg-core/ecapture
+          cp LICENSE CHANGELOG.md README.md README-zh_Hans.md dist/pkg-core/
+          tar -czf dist/ecapture-v0.0.0-ci-${{ github.sha }}-linux-arm64-core.tar.gz -C dist pkg-core
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
@@ -117,6 +149,22 @@ jobs:
           make clean
           make env
           make nocore
+
+      - name: Package non-CO-RE tar.gz (arm64)
+        run: |
+          set -e
+          rm -rf dist/pkg-nocore
+          mkdir -p dist/pkg-nocore
+          cp ./bin/ecapture dist/pkg-nocore/ecapture
+          cp LICENSE CHANGELOG.md README.md README-zh_Hans.md dist/pkg-nocore/
+          tar -czf dist/ecapture-v0.0.0-ci-${{ github.sha }}-linux-arm64-nocore.tar.gz -C dist pkg-nocore
+
+      - name: Upload build tar.gz artifacts (arm64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecapture-linux-arm64-${{ github.sha }}-tar.gz
+          path: dist/ecapture-*.tar.gz
+          retention-days: 7
       - name: Build CO-RE (Cross-Compilation)
         run: |
           make clean
